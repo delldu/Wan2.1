@@ -1,17 +1,20 @@
 # Copyright 2024-2025 The Alibaba Wan Team Authors. All rights reserved.
 import torch
 
-try:
-    import flash_attn_interface
-    FLASH_ATTN_3_AVAILABLE = True
-except ModuleNotFoundError:
-    FLASH_ATTN_3_AVAILABLE = False
+# try:
+#     import flash_attn_interface
+#     FLASH_ATTN_3_AVAILABLE = True
+# except ModuleNotFoundError:
+#     FLASH_ATTN_3_AVAILABLE = False
 
-try:
-    import flash_attn
-    FLASH_ATTN_2_AVAILABLE = True
-except ModuleNotFoundError:
-    FLASH_ATTN_2_AVAILABLE = False
+# try:
+#     import flash_attn
+#     FLASH_ATTN_2_AVAILABLE = True
+# except ModuleNotFoundError:
+#     FLASH_ATTN_2_AVAILABLE = False
+
+FLASH_ATTN_3_AVAILABLE = False
+FLASH_ATTN_2_AVAILABLE = False
 
 import warnings
 
@@ -108,7 +111,7 @@ def flash_attention(
             softmax_scale=softmax_scale,
             causal=causal,
             deterministic=deterministic)[0].unflatten(0, (b, lq))
-    else:
+    elif FLASH_ATTN_2_AVAILABLE:
         assert FLASH_ATTN_2_AVAILABLE
         x = flash_attn.flash_attn_varlen_func(
             q=q,
@@ -125,6 +128,12 @@ def flash_attention(
             causal=causal,
             window_size=window_size,
             deterministic=deterministic).unflatten(0, (b, lq))
+    else:
+        q = q.unsqueeze(0).transpose(1, 2).to(dtype)
+        k = k.unsqueeze(0).transpose(1, 2).to(dtype)
+        v = v.unsqueeze(0).transpose(1, 2).to(dtype)
+        x = torch.nn.functional.scaled_dot_product_attention(q, k, v, dropout_p=0.0)
+        x = x.transpose(1, 2).contiguous()        
 
     # output
     return x.type(out_dtype)

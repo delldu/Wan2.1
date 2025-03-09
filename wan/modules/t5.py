@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .tokenizers import HuggingfaceTokenizer
+from tqdm import tqdm
 
 __all__ = [
     'T5Model',
@@ -16,6 +17,10 @@ __all__ = [
     'T5EncoderModel',
 ]
 
+def to_cpu(x):
+    return x.cpu() if x is not None else None
+def to_cuda(x):
+    return x.cuda() if x is not None else None
 
 def fp16_clamp(x):
     if x.dtype == torch.float16 and torch.isinf(x).any():
@@ -305,8 +310,16 @@ class T5Encoder(nn.Module):
         x = self.dropout(x)
         e = self.pos_embedding(x.size(1),
                                x.size(1)) if self.shared_pos else None
-        for block in self.blocks:
-            x = block(x, mask, pos_bias=e)
+        x = to_cuda(x)
+        e = to_cuda(e)
+        mask = to_cuda(mask)
+        with tqdm(total=len(self.blocks)) as pbar:        
+            for block in self.blocks:
+                block = block.cuda()
+                x = block(x, mask, pos_bias=e)
+                block = block.cpu()
+                pbar.update(1)
+        x = to_cpu(x)
         x = self.norm(x)
         x = self.dropout(x)
         return x
